@@ -226,9 +226,81 @@
             body { background-color: #f0f2f5; }
         }
     </style>
+    <style>
+        /* Wake Lock status indicator */
+        .wakelock-pill {
+            position: fixed;
+            top: max(10px, env(safe-area-inset-top));
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(39, 174, 96, 0.95);
+            color: #fff;
+            padding: 6px 14px;
+            border-radius: 999px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            z-index: 2000;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+            user-select: none;
+        }
+        .wakelock-pill.show { opacity: 1; }
+        .wakelock-pill .dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: #fff;
+            animation: wlpulse 2s infinite;
+        }
+        .wakelock-pill.fallback { background: rgba(243, 156, 18, 0.95); }
+        .wakelock-pill.off { background: rgba(149, 165, 166, 0.9); }
+        .wakelock-pill.off .dot { animation: none; opacity: 0.6; }
+        @keyframes wlpulse {
+            0%, 100% { opacity: 1; }
+            50%      { opacity: 0.35; }
+        }
+        /* The invisible keep-screen-awake video must be in the DOM but invisible. */
+        #wakelock-video {
+            position: fixed;
+            left: -10000px;
+            top: -10000px;
+            width: 1px;
+            height: 1px;
+            opacity: 0;
+            pointer-events: none;
+            visibility: hidden;
+        }
+    </style>
 </head>
 
 <body>
+<!-- Hidden silent video element: classic iOS Safari trick to keep screen awake.
+     Looping a tiny muted MP4 prevents iOS from auto-locking the display, even when
+     the Wake Lock API is unavailable or has been released (e.g. on tab switch in PWA). -->
+<video id="wakelock-video"
+       muted
+       playsinline
+       loop
+       preload="auto"
+       disablepictureinpicture
+       controlslist="nodownload noplaybackrate"
+       aria-hidden="true">
+  <!-- Inline base64 silent H.264 MP4 (0.5s black frame, ~1.5 kB). -->
+  <source type="video/mp4"
+          src="data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAM2bW9vdgAAAGxtdmhkAAAAAAAAAAAAAAAAAAAD6AAAAfQAAQAAAQAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAmF0cmFrAAAAXHRraGQAAAADAAAAAAAAAAAAAAABAAAAAAAAAfQAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAACAAAAAgAAAAAAAkZWR0cwAAABxlbHN0AAAAAAAAAAEAAAH0AAAAAAABAAAAAAHZbWRpYQAAACBtZGhkAAAAAAAAAAAAAAAAAAAoAAAAFABVxAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABhG1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAURzdGJsAAAAuHN0c2QAAAAAAAAAAQAAAKhhdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAACAAIABIAAAASAAAAAAAAAABFExhdmM2MS4zLjEwMCBsaWJ4MjY0AAAAAAAAAAAAAAAAGP//AAAALmF2Y0MBQsAe/+EAFmdCwB7aJbARAAADAAEAAAMAFA8WLqABAAVozgGXIAAAABBwYXNwAAAAAQAAAAEAAAAUYnRydAAAAAAAACsgAAArIAAAABhzdHRzAAAAAAAAAAEAAAAFAAAEAAAAABRzdHNzAAAAAAAAAAEAAAABAAAAHHN0c2MAAAAAAAAAAQAAAAEAAAAFAAAAAQAAAChzdHN6AAAAAAAAAAAAAAAFAAACigAAAAoAAAAKAAAACgAAAAoAAAAUc3RjbwAAAAAAAAABAAADZgAAAGF1ZHRhAAAAWW1ldGEAAAAAAAAAIWhkbHIAAAAAAAAAAG1kaXJhcHBsAAAAAAAAAAAAAAAALGlsc3QAAAAkqXRvbwAAABxkYXRhAAAAAQAAAABMYXZmNjEuMS4xMDAAAAAIZnJlZQAAArptZGF0AAACcgYF//9u3EXpvebZSLeWLNgg2SPu73gyNjQgLSBjb3JlIDE2NCByMzE5MSA0NjEzYWMzIC0gSC4yNjQvTVBFRy00IEFWQyBjb2RlYyAtIENvcHlsZWZ0IDIwMDMtMjAyNCAtIGh0dHA6Ly93d3cudmlkZW9sYW4ub3JnL3gyNjQuaHRtbCAtIG9wdGlvbnM6IGNhYmFjPTAgcmVmPTEgZGVibG9jaz0xOi0zOi0zIGFuYWx5c2U9MHgxOjB4MTExIG1lPWhleCBzdWJtZT0yIHBzeT0xIHBzeV9yZD0yLjAwOjAuNzAgbWl4ZWRfcmVmPTAgbWVfcmFuZ2U9MTYgY2hyb21hX21lPTEgdHJlbGxpcz0wIDh4OGRjdD0wIGNxbT0wIGRlYWR6b25lPTIxLDExIGZhc3RfcHNraXA9MSBjaHJvbWFfcXBfb2Zmc2V0PTAgdGhyZWFkcz0xIGxvb2thaGVhZF90aHJlYWRzPTEgc2xpY2VkX3RocmVhZHM9MCBucj0wIGRlY2ltYXRlPTEgaW50ZXJsYWNlZD0wIGJsdXJheV9jb21wYXQ9MCBjb25zdHJhaW5lZF9pbnRyYT0wIGJmcmFtZXM9MCB3ZWlnaHRwPTAga2V5aW50PTI1MCBrZXlpbnRfbWluPTEwIHNjZW5lY3V0PTQwIGludHJhX3JlZnJlc2g9MCByY19sb29rYWhlYWQ9MTAgcmM9Y3JmIG1idHJlZT0xIGNyZj01MS4wIHFjb21wPTAuNjAgcXBtaW49MCBxcG1heD02OSBxcHN0ZXA9NCBpcF9yYXRpbz0xLjQwIGFxPTE6MS4yMACAAAAAEGWIhA/Of//8PRQACvk3W68AAAAGQZogPznLAAAABkGaQD85ywAAAAZBmmA/OcsAAAAGQZqAOznL">
+</video>
+
+<!-- Subtle Wake Lock status indicator (auto-hides when idle). -->
+<div id="wakelock-pill" class="wakelock-pill off" role="status" aria-live="polite">
+    <span class="dot"></span>
+    <span class="wakelock-label">Bildschirm-Timer aus</span>
+</div>
+
+
 
 <div class="container" id="app">
     
@@ -289,23 +361,219 @@
 </div>
 
 <script>
-    let audioCtx = null;
+    // ---------------------------------------------------------------------
+    // AudioManager — robust sound playback for iOS standalone PWAs.
+    //
+    // iOS installed PWAs (home-screen, standalone display-mode) have several
+    // quirks that defeat naive Web Audio code:
+    //
+    //   1. The AudioContext is created in "suspended" state and MUST be
+    //      resumed from inside a user-gesture handler — and the Promise
+    //      returned by resume() must be awaited before scheduling any
+    //      sound, otherwise the first note is dropped.
+    //   2. Audio started from a setInterval / setTimeout callback (which
+    //      is how playBeep() is invoked from the countdown timer) is no
+    //      longer inside the user-gesture stack on iOS. Even after the
+    //      context is "running", silent mode or background suspension
+    //      can prevent the oscillator from being heard.
+    //   3. When the PWA is backgrounded (e.g. user looks at another app)
+    //      iOS suspends the AudioContext again. We must resume it on
+    //      visibilitychange.
+    //   4. The most reliable way to actually emit sound on iOS standalone
+    //      is the HTMLMediaElement path. Using a `<audio playsinline>` with
+    //      a data: URI guarantees it is treated as an audio (not video)
+    //      element and bypasses the silent-mode mute for short tones.
+    //
+    // The strategy here is: use an <audio> element as the primary
+    // playback path (with a tiny WAV beep embedded as a data URI), and
+    // keep the Web Audio oscillator as a richer fallback. The audio
+    // element is created once and pre-warmed during the first user
+    // gesture so iOS fully unlocks the audio session.
+    // ---------------------------------------------------------------------
+    const BEEP_WAV_URI = "data:audio/wav;base64,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";
 
-    function playBeep() {
-        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        if (audioCtx.state === 'suspended') audioCtx.resume();
-        
-        const oscillator = audioCtx.createOscillator();
-        const gainNode = audioCtx.createGain();
-        oscillator.type = 'sine';
-        oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); 
-        gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime); 
-        gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
-        oscillator.connect(gainNode);
-        gainNode.connect(audioCtx.destination);
-        oscillator.start();
-        oscillator.stop(audioCtx.currentTime + 0.5);
-    }
+    const AudioManager = (function () {
+        let audioCtx = null;
+        let beepEl = null;          // <audio> element fallback (works in iOS PWA)
+        let unlocked = false;       // user gesture has run the unlock routine
+        let unlockPromise = null;
+
+        function _makeAudioEl() {
+            try {
+                const el = new Audio(BEEP_WAV_URI);
+                el.preload = 'auto';
+                el.setAttribute('playsinline', '');
+                el.setAttribute('webkit-playsinline', '');
+                el.setAttribute('x5-playsinline', '');
+                el.loop = false;
+                el.volume = 1.0;
+                el.muted = false;
+                return el;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function _ensureCtx() {
+            if (audioCtx) return audioCtx;
+            try {
+                const Ctor = window.AudioContext || window.webkitAudioContext;
+                if (!Ctor) return null;
+                audioCtx = new Ctor();
+                return audioCtx;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        /**
+         * iOS PWA audio unlock — must be invoked synchronously from a
+         * user gesture (touchend / click / keydown). This:
+         *   - creates / resumes the AudioContext and awaits resume()
+         *   - creates an <audio> element and calls .play().then(pause())
+         *     which is the documented trick to fully prime iOS audio
+         *     even with the silent / mute switch engaged.
+         */
+        function unlock() {
+            if (unlocked) return unlockPromise || Promise.resolve(true);
+            if (unlockPromise) return unlockPromise;
+
+            unlockPromise = (async function () {
+                // 1) Create + resume the AudioContext inside the gesture.
+                const ctx = _ensureCtx();
+                if (ctx && ctx.state === 'suspended') {
+                    try { await ctx.resume(); } catch (e) { /* ignore */ }
+                }
+
+                // 2) Create an <audio> element and play+pause it inside the
+                //    gesture. On iOS this is what actually unlocks the
+                //    audio session so later .play() calls (from timers)
+                //    are audible.
+                if (!beepEl) beepEl = _makeAudioEl();
+                if (beepEl) {
+                    try {
+                        beepEl.currentTime = 0;
+                        const p = beepEl.play();
+                        if (p && typeof p.then === 'function') {
+                            await p.catch(() => {});
+                        }
+                        // Immediately pause + rewind so the priming is
+                        // silent. The play()/pause() pair is what flips
+                        // iOS's audio session to "active".
+                        beepEl.pause();
+                        beepEl.currentTime = 0;
+                    } catch (e) { /* ignore */ }
+                }
+
+                // 3) Also do a silent oscillator prime through the
+                //    WebAudio path so it stays unlocked too.
+                if (ctx) {
+                    try {
+                        const osc = ctx.createOscillator();
+                        const gain = ctx.createGain();
+                        gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+                        osc.connect(gain);
+                        gain.connect(ctx.destination);
+                        osc.start();
+                        osc.stop(ctx.currentTime + 0.01);
+                    } catch (e) { /* ignore */ }
+                }
+
+                unlocked = true;
+                return true;
+            })();
+
+            return unlockPromise;
+        }
+
+        /**
+         * Schedule a beep. Safe to call from anywhere — setInterval,
+         * setTimeout, callbacks. If audio is not yet unlocked it will
+         * still try to play (it will be silent on iOS until the first
+         * user gesture primes the session; subsequent beeps work).
+         */
+        function beep(opts) {
+            opts = opts || {};
+            const freq = opts.freq || 880;
+            const dur = opts.dur || 0.18;
+            const vol = (typeof opts.volume === 'number') ? opts.volume : 0.5;
+
+            // Path A: HTMLAudioElement — most reliable on iOS PWA.
+            if (beepEl) {
+                try {
+                    // Use a fresh clone for each beep so overlapping
+                    // beeps can layer (countdown 3-2-1 may overlap a tick).
+                    const clone = beepEl.cloneNode(true);
+                    clone.removeAttribute('id');
+                    clone.volume = vol;
+                    clone.muted = false;
+                    clone.currentTime = 0;
+                    const p = clone.play();
+                    if (p && typeof p.catch === 'function') {
+                        p.catch(() => { /* autoplay block — fine */ });
+                    }
+                    // Clean up after the duration so we don't leak.
+                    setTimeout(() => {
+                        try { clone.pause(); clone.src = ''; } catch (e) {}
+                    }, Math.max(600, Math.round(dur * 1000) + 200));
+                    return true;
+                } catch (e) { /* fall through to oscillator */ }
+            }
+
+            // Path B: Web Audio oscillator fallback.
+            const ctx = _ensureCtx();
+            if (!ctx) return false;
+            if (ctx.state === 'suspended') {
+                ctx.resume().catch(() => {});
+            }
+            try {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, ctx.currentTime);
+                gain.gain.setValueAtTime(vol, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + dur);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start();
+                osc.stop(ctx.currentTime + dur);
+                return true;
+            } catch (e) {
+                return false;
+            }
+        }
+
+        // Re-resume whenever the PWA returns to the foreground.
+        // iOS suspends the AudioContext on backgrounding.
+        function _onVisibility() {
+            if (document.visibilityState !== 'visible') return;
+            const ctx = _ensureCtx();
+            if (ctx && ctx.state === 'suspended') {
+                ctx.resume().catch(() => {});
+            }
+        }
+        document.addEventListener('visibilitychange', _onVisibility);
+        window.addEventListener('pageshow', _onVisibility);
+
+        // One-time user-gesture unlock, attached at the capture phase
+        // so it fires before any other handler can swallow the event.
+        function _onFirstGesture(e) {
+            // Don't react to gestures on disabled elements.
+            if (e && e.target && e.target.closest && e.target.closest('[aria-disabled="true"]')) {
+                return;
+            }
+            unlock();
+        }
+        const GESTURE_EVENTS = ['touchend', 'pointerup', 'click', 'keydown'];
+        GESTURE_EVENTS.forEach((ev) => {
+            window.addEventListener(ev, _onFirstGesture, { capture: true, passive: true });
+        });
+
+        return { unlock, beep, isUnlocked: () => unlocked };
+    })();
+
+    // Public alias used by the rest of the page.
+    function playBeep() { AudioManager.beep(); }
 
     // Detaillierte Datenstruktur für die 6 Hauptübungen
     const uniqueExercises = [
@@ -534,8 +802,11 @@
     }
 
     function startWorkout() {
-        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        if (audioCtx.state === 'suspended') audioCtx.resume();
+        // The Start button click IS a user gesture, so we explicitly
+        // unlock the audio session here too (in addition to the global
+        // first-gesture listener) so beeps in the first 3-2-1 count
+        // are guaranteed audible on iOS standalone PWA.
+        AudioManager.unlock();
 
         overviewScreen.classList.add('hidden');
         workoutScreen.classList.remove('hidden');
@@ -549,6 +820,192 @@
     // Init
     renderOverviewList();
     updateDisplay();
+
+    /* ============================================================
+     * WakeLockManager — keeps the screen awake during the workout.
+     *
+     * Strategy:
+     *   1. Primary: navigator.wakeLock.request('screen') (supported in
+     *      Safari 16.4+ on iOS, all modern Chromium, Firefox).
+     *   2. Fallback: a hidden, muted, looping inline MP4 (NoSleep.js style)
+     *      which keeps iOS Safari and many webviews from dimming the screen
+     *      even when Wake Lock API is unavailable, denied, or has been
+     *      released because the document was hidden.
+     *   3. Auto re-acquire on `visibilitychange` whenever the tab returns
+     *      to foreground AND a workout is active (or app is open & used).
+     *   4. Activated on any user gesture (tap anywhere / start workout).
+     *   5. Released when the workout is finished or the page is unloaded.
+     * ============================================================ */
+    const WakeLockManager = (function () {
+        const video = document.getElementById('wakelock-video');
+        const pill = document.getElementById('wakelock-pill');
+        const pillLabel = pill.querySelector('.wakelock-label');
+        const NOOP = Promise.resolve(null);
+        let wakeLock = null;          // current WakeLockSentinel
+        let wakeLockSupported = ('wakeLock' in navigator) &&
+                                typeof navigator.wakeLock.request === 'function';
+        let fallbackActive = false;   // silent-video loop playing?
+        let engaged = false;          // manager on/off?
+        let workoutActive = false;    // workout in progress?
+        let hideTimer = null;
+
+        function setPill(text, cls) {
+            pill.classList.remove('off', 'fallback', 'show');
+            if (cls) pill.classList.add(cls);
+            pillLabel.textContent = text;
+            pill.classList.add('show');
+            if (hideTimer) clearTimeout(hideTimer);
+            hideTimer = setTimeout(() => pill.classList.remove('show'), 2500);
+        }
+
+        async function requestNativeWakeLock() {
+            if (!wakeLockSupported) return false;
+            try {
+                wakeLock = await navigator.wakeLock.request('screen');
+                wakeLock.addEventListener('release', () => {
+                    // Sent when OS/browser drops the lock (e.g. tab hidden).
+                    wakeLock = null;
+                    if (engaged) maybeUseFallback('API released');
+                });
+                return true;
+            } catch (err) {
+                console.warn('[WakeLock] request() failed:', err && err.name, err && err.message);
+                return false;
+            }
+        }
+
+        function startFallback() {
+            if (fallbackActive || !video) return;
+            try {
+                // Play must be called from a user gesture; harmless no-op if so.
+                const p = video.play();
+                if (p && typeof p.catch === 'function') {
+                    p.catch(() => { /* autoplay block — fine, we try again on gesture */ });
+                }
+                fallbackActive = true;
+            } catch (_) { /* ignore */ }
+        }
+
+        function stopFallback() {
+            if (!fallbackActive || !video) return;
+            try { video.pause(); video.currentTime = 0; } catch (_) {}
+            fallbackActive = false;
+        }
+
+        function maybeUseFallback(reason) {
+            // Only escalate to fallback if we still want to keep the screen awake.
+            if (!engaged) return;
+            if (wakeLock) return;
+            startFallback();
+            if (fallbackActive) setPill('Bildschirm wach (Fallback)', 'fallback');
+        }
+
+        async function acquire() {
+            if (!engaged) return;
+            // Try native first.
+            const ok = await requestNativeWakeLock();
+            if (ok) {
+                stopFallback();
+                setPill('Bildschirm wach', '');
+            } else {
+                // Use silent video fallback as the bulletproof safety net.
+                startFallback();
+                setPill('Bildschirm wach (Fallback)', 'fallback');
+            }
+        }
+
+        function release() {
+            engaged = false;
+            if (wakeLock) {
+                try { wakeLock.release(); } catch (_) {}
+                wakeLock = null;
+            }
+            stopFallback();
+            setPill('Bildschirm-Timer aus', 'off');
+        }
+
+        async function engage(opts) {
+            opts = opts || {};
+            engaged = true;
+            if (typeof opts.workoutActive === 'boolean') {
+                workoutActive = opts.workoutActive;
+            }
+            await acquire();
+        }
+
+        function setWorkoutActive(v) {
+            workoutActive = !!v;
+            if (!v) {
+                // Workout finished — release everything.
+                release();
+            } else if (engaged) {
+                // Workout resumed — reacquire.
+                acquire();
+            }
+        }
+
+        // Wire visibilitychange so we re-acquire when the tab returns to the
+        // foreground and we still want the screen kept on.
+        document.addEventListener('visibilitychange', async () => {
+            if (document.visibilityState === 'visible' && engaged) {
+                await acquire();
+            } else if (document.visibilityState === 'hidden') {
+                // OS will likely drop the native wake lock automatically;
+                // we keep the silent-video fallback playing in case iOS PWA
+                // is still in the foreground (audio-less, invisible, harmless).
+                if (engaged && workoutActive) startFallback();
+            }
+        });
+
+        // Any meaningful user tap is treated as a gesture: try to (re)engage.
+        // We attach once with capture so it fires before any inner handlers.
+        let lastGesture = 0;
+        function onUserGesture() {
+            const now = Date.now();
+            if (now - lastGesture < 400) return;
+            lastGesture = now;
+            if (!engaged) {
+                engage({ workoutActive });
+            } else if (!wakeLock && !fallbackActive) {
+                acquire();
+            } else if (wakeLockSupported && !wakeLock) {
+                acquire();
+            }
+        }
+        ['pointerdown', 'touchstart', 'click', 'keydown'].forEach((ev) => {
+            window.addEventListener(ev, onUserGesture, { passive: true, capture: true });
+        });
+
+        // Release cleanly on unload.
+        window.addEventListener('pagehide', release);
+        window.addEventListener('beforeunload', release);
+
+        return {
+            engage,
+            release,
+            setWorkoutActive,
+            isSupported: () => wakeLockSupported,
+            isEngaged:   () => engaged,
+        };
+    })();
+
+    /* Hook the workout lifecycle to the WakeLockManager. */
+    const _origStartWorkout = startWorkout;
+    startWorkout = function () {
+        _origStartWorkout();
+        try { WakeLockManager.setWorkoutActive(true); } catch (_) {}
+    };
+    const _origNextStep = nextStep;
+    nextStep = function () {
+        _origNextStep();
+        // If we just advanced into the final "Fertig" state, release wake lock.
+        if (workoutPlan[currentIndex] && workoutPlan[currentIndex].phase === 'Fertig') {
+            try { WakeLockManager.setWorkoutActive(false); } catch (_) {}
+        }
+    };
+
+    // Expose for debugging.
+    window.WakeLockManager = WakeLockManager;
 </script>
 
 
