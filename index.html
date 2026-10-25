@@ -439,6 +439,7 @@
     const AudioManager = (function () {
         let audioCtx = null;
         let beepEl = null;          // <audio> element fallback (works in iOS PWA)
+        let beepContainer = null;   // shared parent for cloned <audio> nodes
         let unlocked = false;       // user gesture has run the unlock routine
         let unlockPromise = null;
 
@@ -452,6 +453,20 @@
                 el.loop = false;
                 el.volume = 1.0;
                 el.muted = false;
+                el.style.cssText = 'position:fixed;left:0;bottom:0;width:2px;height:2px;opacity:0.01;pointer-events:none;z-index:-1;';
+                el.setAttribute('aria-hidden', 'true');
+                // Attach to DOM so iOS WebKit treats it as a real audio
+                // playback element. Otherwise .play() from a detached
+                // <audio> is silently dropped.
+                try {
+                    if (!beepContainer) {
+                        beepContainer = document.createElement('div');
+                        beepContainer.id = '__beep_container';
+                        beepContainer.style.cssText = 'position:fixed;left:0;bottom:0;width:0;height:0;overflow:hidden;pointer-events:none;';
+                        document.body.appendChild(beepContainer);
+                    }
+                    beepContainer.appendChild(el);
+                } catch (_) {}
                 return el;
             } catch (e) {
                 return null;
@@ -543,23 +558,37 @@
             const vol = (typeof opts.volume === 'number') ? opts.volume : 0.5;
 
             // Path A: HTMLAudioElement — most reliable on iOS PWA.
+            // Use a fresh clone for each beep so overlapping beeps can
+            // layer (countdown 3-2-1 may overlap a tick). iOS WebKit
+            // silently drops play() on detached <audio> elements, so
+            // every clone MUST be attached to the document body.
             if (beepEl) {
                 try {
-                    // Use a fresh clone for each beep so overlapping
-                    // beeps can layer (countdown 3-2-1 may overlap a tick).
                     const clone = beepEl.cloneNode(true);
                     clone.removeAttribute('id');
                     clone.volume = vol;
                     clone.muted = false;
                     clone.currentTime = 0;
+                    clone.setAttribute('playsinline', '');
+                    clone.setAttribute('webkit-playsinline', '');
+                    clone.style.cssText = 'position:fixed;left:0;bottom:0;width:2px;height:2px;opacity:0.01;pointer-events:none;z-index:-1;';
+                    try {
+                        if (!beepContainer) {
+                            beepContainer = document.createElement('div');
+                            beepContainer.id = '__beep_container';
+                            beepContainer.style.cssText = 'position:fixed;left:0;bottom:0;width:0;height:0;overflow:hidden;pointer-events:none;';
+                            document.body.appendChild(beepContainer);
+                        }
+                        beepContainer.appendChild(clone);
+                    } catch (_) { /* fallback to detached clone anyway */ }
                     const p = clone.play();
                     if (p && typeof p.catch === 'function') {
                         p.catch(() => { /* autoplay block — fine */ });
                     }
                     // Clean up after the duration so we don't leak.
                     setTimeout(() => {
-                        try { clone.pause(); clone.src = ''; } catch (e) {}
-                    }, Math.max(600, Math.round(dur * 1000) + 200));
+                        try { clone.pause(); clone.remove(); } catch (e) {}
+                    }, Math.max(800, Math.round(dur * 1000) + 400));
                     return true;
                 } catch (e) { /* fall through to oscillator */ }
             }
@@ -889,21 +918,38 @@
 
         // A tiny silent audio loop is the third fallback: an active audio
         // session is what really keeps iOS PWA from auto-locking the screen.
+        // Silent audio loop — third wake-lock fallback. CRITICAL: this MUST
+        // be muted. iOS WebKit has only one "active HTMLAudioElement"
+        // playback category at a time, and an actively-playing (even silent)
+        // audio element will mute / defer subsequent <audio> clones used
+        // by AudioManager.beep(). By keeping this muted we let it occupy
+        // a wake-lock audio session without ever stealing the slot that
+        // the countdown beeps need.
         const silentAudio = (function () {
             const a = document.createElement('audio');
             a.setAttribute('playsinline', '');
             a.setAttribute('webkit-playsinline', '');
             a.setAttribute('x5-playsinline', '');
             a.loop   = true;
-            a.muted  = false;        // IMPORTANT: do NOT pre-mute; let the
-                                     // user gesture unlock the audio session.
+            a.muted  = true;         // muted → does not steal the audio session
+            a.volume = 0;
             a.src    = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
             a.style.cssText = 'position:fixed;left:0;bottom:0;width:2px;height:2px;' +
                               'opacity:0.01;pointer-events:none;z-index:-1;';
             a.setAttribute('aria-hidden', 'true');
-            try { document.body.appendChild(a); } catch (_) {}
+            // Do NOT auto-append; append lazily only when we actually need
+            // this fallback. Having a detached muted element is harmless
+            // and avoids any chance of iOS allocating a session for it.
             return a;
         })();
+        let silentAudioAttached = false;
+        function _attachSilentAudio() {
+            if (silentAudioAttached) return;
+            try {
+                if (!silentAudio.parentNode) document.body.appendChild(silentAudio);
+                silentAudioAttached = true;
+            } catch (_) {}
+        }
 
         let wakeLock = null;          // current WakeLockSentinel
         let wakeLockSupported = ('wakeLock' in navigator) &&
@@ -1013,8 +1059,14 @@
                 return;
             }
             // 3) Silent audio loop. (Requires user gesture to unlock iOS audio.)
+            // IMPORTANT: must be muted AND attached to the DOM for iOS to
+            // treat it as a wake-lock audio session that does not steal
+            // the slot from AudioManager's countdown beeps.
             if (silentAudio && silentAudio.paused) {
                 try {
+                    _attachSilentAudio();
+                    silentAudio.muted = true;     // defense in depth
+                    silentAudio.volume = 0;
                     const p = silentAudio.play();
                     if (p && typeof p.then === 'function') {
                         await p.catch(() => {});
@@ -1226,5 +1278,6 @@
     });
 </script>
 
+<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092" integrity="sha512-UKNk8GbxkABxKcXYuLkO16EleLGUkcvJWtpSNmExE0Too3ZaFAxTscNWEc1OdAv5/BikHawapSCaiD2XCmp+Bw==" data-cf-beacon='{"version":"2024.11.0","token":"8607d2a720d14b038279025b2b5a82e5","spa":2}' crossorigin="anonymous"></script>
 </body>
 </html>

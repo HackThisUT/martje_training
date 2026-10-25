@@ -3,7 +3,7 @@
  * Strategy: precache core assets on install, cache-first with
  * network fallback for navigations and same-origin GETs.
  */
-const CACHE_VERSION = "hwp-v3";
+const CACHE_VERSION = "hwp-v1";
 const CORE_ASSETS = [
   "./",
   "./index.html",
