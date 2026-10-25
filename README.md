@@ -217,3 +217,31 @@ python3 -m http.server 8080   # nur HTTP, kein voller PWA-Test auf iPhone
 Privates Workout‑Projekt — frei verwendbar, kein Tracking, keine Werbung, keine externen Abhängigkeiten.
 
 **Viel Spaß beim Training!** 💪
+
+## iOS-Audio Fix (Standalone-PWA, iPhone 17 / iOS 17+/18)
+
+In der als Home-Bildschirm-PWA installierten Variante wurde Audio nicht
+abgespielt. Ursachen und Fixes:
+
+1. **DOCTYPE fehlte** – Datei startete mit bare `<head>` → Safari riet in
+   den Quirks-Modus und behandelte `<audio>`/AudioContext anders. Behoben
+   durch Voranstellen von `<!DOCTYPE html>` und `<html lang="de">`.
+2. **Priming war nicht stumm** – Der erste `play()/pause()`-Trick spielte
+   das echte 880 Hz-WAV und erzeugte einen hörbaren Klick, reaktivierte
+   aber die Audio-Session. Auf iOS 17+/18 reicht das nicht mehr — das
+   priming muss vor dem ersten Timer-getriebenen `play()` abgeschlossen
+   sein. Fix: `await AudioManager.unlock()` in `startWorkout()`.
+3. **Clone noch nicht dekodiert** – `beep()` klonierte den `<audio>` und
+   rief sofort `.play()` auf. iOS verwirft play()-Aufrufe auf
+   nicht-bereiten data:-Audio-Elementen stillschweigend. Fix:
+   `await canplay/loadeddata` (Timeout 600 ms) vor `.play()`.
+4. **Wake-Lock-Video belegt die HTMLMediaElement-Slot** – Das
+   `<video id="wakelock-video">` (NoSleep-Trick) und das canvas-stream
+   `<video>` werden iOS-seitig als „aktives Medienelement" behandelt
+   und konkurrieren mit den Beep-Klonen. Fix: beim Start des Workouts
+   beide Videos pausieren und WakeLock-Fallbacks stoppen.
+5. **Service-Worker-Cache** – Cache-Version von `hwp-v1` auf `hwp-v2`
+   erhöht, damit iOS beim nächsten App-Start das gefixte `index.html`
+   ausliefert.
+
+Betroffene Dateien: `index.html`, `service-worker.js`.

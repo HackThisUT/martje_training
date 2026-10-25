@@ -1,3 +1,5 @@
+<!DOCTYPE html>
+<html lang="de">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
@@ -511,16 +513,32 @@
                 if (!beepEl) beepEl = _makeAudioEl();
                 if (beepEl) {
                     try {
+                        // Make sure the source has actually decoded before
+                        // .play() — iOS WebKit will reject play() on an
+                        // <audio> whose data: URI hasn't loaded yet.
+                        if (beepEl.readyState < 2 /* HAVE_CURRENT_DATA */) {
+                            await new Promise((res) => {
+                                const done = () => { try { beepEl.removeEventListener('canplaythrough', done); beepEl.removeEventListener('canplay', done); beepEl.removeEventListener('loadeddata', done); } catch(_){} res(); };
+                                beepEl.addEventListener('canplaythrough', done, { once: true });
+                                beepEl.addEventListener('canplay', done, { once: true });
+                                beepEl.addEventListener('loadeddata', done, { once: true });
+                                setTimeout(done, 800);
+                            });
+                        }
+                        // CRITICAL: prime SILENTLY. The original code played
+                        // the actual 880 Hz WAV which produced an audible
+                        // click at unlock time. iOS still activates the
+                        // session when the probe is muted (volume=0).
+                        beepEl.volume = 0;
+                        beepEl.muted = false;
                         beepEl.currentTime = 0;
                         const p = beepEl.play();
                         if (p && typeof p.then === 'function') {
                             await p.catch(() => {});
                         }
-                        // Immediately pause + rewind so the priming is
-                        // silent. The play()/pause() pair is what flips
-                        // iOS's audio session to "active".
                         beepEl.pause();
                         beepEl.currentTime = 0;
+                        beepEl.volume = 1.0;
                     } catch (e) { /* ignore */ }
                 }
 
@@ -581,11 +599,23 @@
                         }
                         beepContainer.appendChild(clone);
                     } catch (_) { /* fallback to detached clone anyway */ }
+                    // Wait for the clone's data: source to decode before
+                    // calling play(). On iOS 17+/18 PWA, play() on a
+                    // not-yet-loaded <audio> returns a rejected promise
+                    // and NO sound is produced.
+                    if (clone.readyState < 2) {
+                        await new Promise((res) => {
+                            const done = () => { try { clone.removeEventListener('canplaythrough', done); clone.removeEventListener('canplay', done); clone.removeEventListener('loadeddata', done); } catch(_){} res(); };
+                            clone.addEventListener('canplaythrough', done, { once: true });
+                            clone.addEventListener('canplay', done, { once: true });
+                            clone.addEventListener('loadeddata', done, { once: true });
+                            setTimeout(done, 600);
+                        });
+                    }
                     const p = clone.play();
                     if (p && typeof p.catch === 'function') {
                         p.catch(() => { /* autoplay block — fine */ });
                     }
-                    // Clean up after the duration so we don't leak.
                     setTimeout(() => {
                         try { clone.pause(); clone.remove(); } catch (e) {}
                     }, Math.max(800, Math.round(dur * 1000) + 400));
@@ -874,16 +904,33 @@
         startTimer();
     }
 
-    function startWorkout() {
+    async function startWorkout() {
         // The Start button click IS a user gesture, so we explicitly
         // unlock the audio session here too (in addition to the global
         // first-gesture listener) so beeps in the first 3-2-1 count
         // are guaranteed audible on iOS standalone PWA.
-        AudioManager.unlock();
+        // We AWAIT the unlock so the AudioContext is resumed AND the
+        // priming <audio>.play() has completed BEFORE the first
+        // setInterval tick fires playBeep(). Without this await the
+        // 3 / 2 / 1 countdown beep is silently dropped on iOS 17+/18.
+        try { await AudioManager.unlock(); } catch (_) {}
+
+        // Defensive: pause the WakeLockManager's looping video so iOS
+        // WebKit does not "claim" the active HTMLMediaElement slot for
+        // the silent wake-lock video and starve our beep clones.
+        try {
+            const wv = document.getElementById('wakelock-video');
+            if (wv && !wv.paused) { try { wv.pause(); wv.currentTime = 0; } catch(_){} }
+            const cv = document.getElementById('wakelock-canvas-video');
+            if (cv && !cv.paused) { try { cv.pause(); } catch(_){} }
+            if (window.WakeLockManager && WakeLockManager.stopFallback) {
+                WakeLockManager.stopFallback();
+            }
+        } catch (_) {}
 
         overviewScreen.classList.add('hidden');
         workoutScreen.classList.remove('hidden');
-        
+
         const first = workoutPlan[0];
         timeLeft = first.duration;
         updateDisplay();
