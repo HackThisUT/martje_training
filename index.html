@@ -264,15 +264,38 @@
             50%      { opacity: 0.35; }
         }
         /* The invisible keep-screen-awake video must be in the DOM but invisible. */
+        /* NoSleep.js-style keep-awake element.
+           IMPORTANT for iOS WebKit PWA:
+           - Do NOT use visibility:hidden, opacity:0, or display:none,
+             iOS will pause the video immediately and the trick stops working.
+           - Use opacity:0.01 with 1px dimensions, off-screen but rendered.
+           - pointer-events:none so taps pass through. */
         #wakelock-video {
             position: fixed;
-            left: -10000px;
-            top: -10000px;
+            left: 0;
+            bottom: 0;
             width: 1px;
             height: 1px;
-            opacity: 0;
+            opacity: 0.01;
             pointer-events: none;
-            visibility: hidden;
+            z-index: -1;
+            background: transparent;
+        }
+        /* Canvas captureStream keep-awake element (very reliable on iOS). */
+        #wakelock-canvas-wrap {
+            position: fixed;
+            left: 0;
+            bottom: 0;
+            width: 2px;
+            height: 2px;
+            opacity: 0.01;
+            pointer-events: none;
+            z-index: -1;
+        }
+        #wakelock-canvas-wrap video {
+            width: 2px;
+            height: 2px;
+            display: block;
         }
     </style>
 </head>
@@ -284,15 +307,36 @@
 <video id="wakelock-video"
        muted
        playsinline
+       webkit-playsinline
        loop
+       autoplay
        preload="auto"
        disablepictureinpicture
+       x5-playsinline
+       x5-video-player-type="h5"
        controlslist="nodownload noplaybackrate"
-       aria-hidden="true">
+       aria-hidden="true"
+       style="opacity:0.01;width:1px;height:1px;">
   <!-- Inline base64 silent H.264 MP4 (0.5s black frame, ~1.5 kB). -->
   <source type="video/mp4"
           src="data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAM2bW9vdgAAAGxtdmhkAAAAAAAAAAAAAAAAAAAD6AAAAfQAAQAAAQAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAmF0cmFrAAAAXHRraGQAAAADAAAAAAAAAAAAAAABAAAAAAAAAfQAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAACAAAAAgAAAAAAAkZWR0cwAAABxlbHN0AAAAAAAAAAEAAAH0AAAAAAABAAAAAAHZbWRpYQAAACBtZGhkAAAAAAAAAAAAAAAAAAAoAAAAFABVxAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABhG1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAURzdGJsAAAAuHN0c2QAAAAAAAAAAQAAAKhhdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAACAAIABIAAAASAAAAAAAAAABFExhdmM2MS4zLjEwMCBsaWJ4MjY0AAAAAAAAAAAAAAAAGP//AAAALmF2Y0MBQsAe/+EAFmdCwB7aJbARAAADAAEAAAMAFA8WLqABAAVozgGXIAAAABBwYXNwAAAAAQAAAAEAAAAUYnRydAAAAAAAACsgAAArIAAAABhzdHRzAAAAAAAAAAEAAAAFAAAEAAAAABRzdHNzAAAAAAAAAAEAAAABAAAAHHN0c2MAAAAAAAAAAQAAAAEAAAAFAAAAAQAAAChzdHN6AAAAAAAAAAAAAAAFAAACigAAAAoAAAAKAAAACgAAAAoAAAAUc3RjbwAAAAAAAAABAAADZgAAAGF1ZHRhAAAAWW1ldGEAAAAAAAAAIWhkbHIAAAAAAAAAAG1kaXJhcHBsAAAAAAAAAAAAAAAALGlsc3QAAAAkqXRvbwAAABxkYXRhAAAAAQAAAABMYXZmNjEuMS4xMDAAAAAIZnJlZQAAArptZGF0AAACcgYF//9u3EXpvebZSLeWLNgg2SPu73gyNjQgLSBjb3JlIDE2NCByMzE5MSA0NjEzYWMzIC0gSC4yNjQvTVBFRy00IEFWQyBjb2RlYyAtIENvcHlsZWZ0IDIwMDMtMjAyNCAtIGh0dHA6Ly93d3cudmlkZW9sYW4ub3JnL3gyNjQuaHRtbCAtIG9wdGlvbnM6IGNhYmFjPTAgcmVmPTEgZGVibG9jaz0xOi0zOi0zIGFuYWx5c2U9MHgxOjB4MTExIG1lPWhleCBzdWJtZT0yIHBzeT0xIHBzeV9yZD0yLjAwOjAuNzAgbWl4ZWRfcmVmPTAgbWVfcmFuZ2U9MTYgY2hyb21hX21lPTEgdHJlbGxpcz0wIDh4OGRjdD0wIGNxbT0wIGRlYWR6b25lPTIxLDExIGZhc3RfcHNraXA9MSBjaHJvbWFfcXBfb2Zmc2V0PTAgdGhyZWFkcz0xIGxvb2thaGVhZF90aHJlYWRzPTEgc2xpY2VkX3RocmVhZHM9MCBucj0wIGRlY2ltYXRlPTEgaW50ZXJsYWNlZD0wIGJsdXJheV9jb21wYXQ9MCBjb25zdHJhaW5lZF9pbnRyYT0wIGJmcmFtZXM9MCB3ZWlnaHRwPTAga2V5aW50PTI1MCBrZXlpbnRfbWluPTEwIHNjZW5lY3V0PTQwIGludHJhX3JlZnJlc2g9MCByY19sb29rYWhlYWQ9MTAgcmM9Y3JmIG1idHJlZT0xIGNyZj01MS4wIHFjb21wPTAuNjAgcXBtaW49MCBxcG1heD02OSBxcHN0ZXA9NCBpcF9yYXRpbz0xLjQwIGFxPTE6MS4yMACAAAAAEGWIhA/Of//8PRQACvk3W68AAAAGQZogPznLAAAABkGaQD85ywAAAAZBmmA/OcsAAAAGQZqAOznL">
 </video>
+
+<!-- Canvas captureStream keep-awake element. Most reliable iOS PWA trick
+     on iOS 17+: a 2x2 canvas paints 1 frame, captureStream() feeds it to a
+     tiny inline <video> which keeps iOS WebKit from suspending the page.
+     The video MUST be in DOM, have non-zero dimensions, and not be
+     display:none / visibility:hidden. -->
+<div id="wakelock-canvas-wrap" aria-hidden="true">
+  <video id="wakelock-canvas-video"
+         muted
+         playsinline
+         webkit-playsinline
+         autoplay
+         loop
+         preload="auto"
+         x5-playsinline></video>
+</div>
 
 <!-- Subtle Wake Lock status indicator (auto-hides when idle). -->
 <div id="wakelock-pill" class="wakelock-pill off" role="status" aria-live="polite">
@@ -837,25 +881,57 @@
      *   5. Released when the workout is finished or the page is unloaded.
      * ============================================================ */
     const WakeLockManager = (function () {
-        const video = document.getElementById('wakelock-video');
-        const pill = document.getElementById('wakelock-pill');
-        const pillLabel = pill.querySelector('.wakelock-label');
-        const NOOP = Promise.resolve(null);
+        const video      = document.getElementById('wakelock-video');
+        const canvasWrap = document.getElementById('wakelock-canvas-wrap');
+        const canvasVid  = document.getElementById('wakelock-canvas-video');
+        const pill       = document.getElementById('wakelock-pill');
+        const pillLabel  = pill && pill.querySelector('.wakelock-label');
+
+        // A tiny silent audio loop is the third fallback: an active audio
+        // session is what really keeps iOS PWA from auto-locking the screen.
+        const silentAudio = (function () {
+            const a = document.createElement('audio');
+            a.setAttribute('playsinline', '');
+            a.setAttribute('webkit-playsinline', '');
+            a.setAttribute('x5-playsinline', '');
+            a.loop   = true;
+            a.muted  = false;        // IMPORTANT: do NOT pre-mute; let the
+                                     // user gesture unlock the audio session.
+            a.src    = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+            a.style.cssText = 'position:fixed;left:0;bottom:0;width:2px;height:2px;' +
+                              'opacity:0.01;pointer-events:none;z-index:-1;';
+            a.setAttribute('aria-hidden', 'true');
+            try { document.body.appendChild(a); } catch (_) {}
+            return a;
+        })();
+
         let wakeLock = null;          // current WakeLockSentinel
         let wakeLockSupported = ('wakeLock' in navigator) &&
                                 typeof navigator.wakeLock.request === 'function';
-        let fallbackActive = false;   // silent-video loop playing?
+        // Track the active fallback tier: 'mp4' | 'canvas' | 'audio' | null
+        let activeFallback = null;
         let engaged = false;          // manager on/off?
         let workoutActive = false;    // workout in progress?
         let hideTimer = null;
+        let keepAliveTimer = null;
+        let canvasRaf = 0;
+        let canvasStream = null;
+        let lastGesture = 0;
+        let gesturePendingPlay = false; // user gesture awaiting video.play()
 
         function setPill(text, cls) {
+            if (!pill || !pillLabel) return;
             pill.classList.remove('off', 'fallback', 'show');
             if (cls) pill.classList.add(cls);
             pillLabel.textContent = text;
             pill.classList.add('show');
             if (hideTimer) clearTimeout(hideTimer);
             hideTimer = setTimeout(() => pill.classList.remove('show'), 2500);
+        }
+
+        function isVideoPlaying(el) {
+            return !!el && !el.paused && !el.ended && el.readyState >= 2 &&
+                   el.currentTime > 0;
         }
 
         async function requestNativeWakeLock() {
@@ -865,7 +941,7 @@
                 wakeLock.addEventListener('release', () => {
                     // Sent when OS/browser drops the lock (e.g. tab hidden).
                     wakeLock = null;
-                    if (engaged) maybeUseFallback('API released');
+                    if (engaged) startFallback('API released');
                 });
                 return true;
             } catch (err) {
@@ -874,43 +950,115 @@
             }
         }
 
-        function startFallback() {
-            if (fallbackActive || !video) return;
-            try {
-                // Play must be called from a user gesture; harmless no-op if so.
-                const p = video.play();
-                if (p && typeof p.catch === 'function') {
-                    p.catch(() => { /* autoplay block — fine, we try again on gesture */ });
-                }
-                fallbackActive = true;
-            } catch (_) { /* ignore */ }
+        // Try every fallback tier in order until one is actually playing.
+        async function startFallback(reason) {
+            if (!engaged) return;
+            // 1) Hidden looping MP4 (NoSleep.js style).
+            if (video && !isVideoPlaying(video)) {
+                try {
+                    video.muted = true;
+                    const p = video.play();
+                    if (p && typeof p.then === 'function') {
+                        await p.catch(() => {});
+                    }
+                    if (isVideoPlaying(video)) {
+                        activeFallback = 'mp4';
+                        setPill('Bildschirm wach (Fallback)', 'fallback');
+                        return;
+                    }
+                } catch (_) { /* fall through */ }
+            } else if (video && isVideoPlaying(video)) {
+                activeFallback = 'mp4';
+                return;
+            }
+            // 2) Canvas captureStream → <video>.
+            if (canvasVid && !isVideoPlaying(canvasVid)) {
+                try {
+                    if (!canvasStream) {
+                        const c = document.createElement('canvas');
+                        c.width = 2; c.height = 2;
+                        const ctx = c.getContext('2d');
+                        if (ctx) {
+                            ctx.fillStyle = '#000';
+                            ctx.fillRect(0, 0, 2, 2);
+                            if (typeof c.captureStream === 'function') {
+                                canvasStream = c.captureStream(1);
+                            } else if (c.captureStream === undefined &&
+                                       typeof MediaStream !== 'undefined') {
+                                // Old API fallback
+                                canvasStream = c.captureStream && c.captureStream(1);
+                            }
+                            if (canvasStream) {
+                                canvasVid.srcObject = canvasStream;
+                                canvasVid.muted = true;
+                                // iOS requires .load() before .play() for srcObject
+                                try { canvasVid.load(); } catch (_) {}
+                            }
+                        }
+                    }
+                    if (canvasStream) {
+                        const p = canvasVid.play();
+                        if (p && typeof p.then === 'function') {
+                            await p.catch(() => {});
+                        }
+                        if (isVideoPlaying(canvasVid)) {
+                            activeFallback = 'canvas';
+                            setPill('Bildschirm wach (Fallback)', 'fallback');
+                            return;
+                        }
+                    }
+                } catch (_) { /* fall through */ }
+            } else if (canvasVid && isVideoPlaying(canvasVid)) {
+                activeFallback = 'canvas';
+                return;
+            }
+            // 3) Silent audio loop. (Requires user gesture to unlock iOS audio.)
+            if (silentAudio && silentAudio.paused) {
+                try {
+                    const p = silentAudio.play();
+                    if (p && typeof p.then === 'function') {
+                        await p.catch(() => {});
+                    }
+                    if (!silentAudio.paused) {
+                        activeFallback = 'audio';
+                        setPill('Bildschirm wach (Fallback)', 'fallback');
+                        return;
+                    }
+                } catch (_) { /* fall through */ }
+            } else if (silentAudio && !silentAudio.paused) {
+                activeFallback = 'audio';
+                return;
+            }
+            // All fallbacks failed — likely no user gesture yet.
+            if (reason) console.info('[WakeLock] fallback not yet active:', reason);
         }
 
         function stopFallback() {
-            if (!fallbackActive || !video) return;
-            try { video.pause(); video.currentTime = 0; } catch (_) {}
-            fallbackActive = false;
-        }
-
-        function maybeUseFallback(reason) {
-            // Only escalate to fallback if we still want to keep the screen awake.
-            if (!engaged) return;
-            if (wakeLock) return;
-            startFallback();
-            if (fallbackActive) setPill('Bildschirm wach (Fallback)', 'fallback');
+            try { if (video) { video.pause(); video.currentTime = 0; } } catch (_) {}
+            try { if (canvasVid) { canvasVid.pause(); } } catch (_) {}
+            try {
+                if (canvasStream) {
+                    canvasStream.getTracks().forEach(t => t.stop && t.stop());
+                }
+            } catch (_) {}
+            try { if (silentAudio) silentAudio.pause(); } catch (_) {}
+            canvasStream = null;
+            activeFallback = null;
         }
 
         async function acquire() {
             if (!engaged) return;
-            // Try native first.
             const ok = await requestNativeWakeLock();
             if (ok) {
                 stopFallback();
                 setPill('Bildschirm wach', '');
             } else {
-                // Use silent video fallback as the bulletproof safety net.
-                startFallback();
-                setPill('Bildschirm wach (Fallback)', 'fallback');
+                await startFallback('acquire');
+                if (activeFallback) {
+                    setPill('Bildschirm wach (Fallback)', 'fallback');
+                } else {
+                    setPill('Tippe zum Bildschirm wach halten', 'fallback');
+                }
             }
         }
 
@@ -921,6 +1069,7 @@
                 wakeLock = null;
             }
             stopFallback();
+            stopKeepAlive();
             setPill('Bildschirm-Timer aus', 'off');
         }
 
@@ -931,46 +1080,90 @@
                 workoutActive = opts.workoutActive;
             }
             await acquire();
+            startKeepAlive();
         }
 
         function setWorkoutActive(v) {
             workoutActive = !!v;
             if (!v) {
-                // Workout finished — release everything.
                 release();
             } else if (engaged) {
-                // Workout resumed — reacquire.
                 acquire();
             }
         }
 
-        // Wire visibilitychange so we re-acquire when the tab returns to the
-        // foreground and we still want the screen kept on.
+        // Periodic watchdog: re-arm fallbacks if iOS paused them.
+        function startKeepAlive() {
+            stopKeepAlive();
+            keepAliveTimer = setInterval(() => {
+                if (!engaged) return;
+                // If native lock dropped, try to reclaim.
+                if (wakeLockSupported && !wakeLock) {
+                    requestNativeWakeLock();
+                }
+                // If fallback video is paused/ended but we still want to
+                // keep screen on, try to replay it.
+                if (video && !isVideoPlaying(video)) {
+                    startFallback('keepalive-video');
+                }
+                if (canvasVid && !isVideoPlaying(canvasVid)) {
+                    startFallback('keepalive-canvas');
+                }
+                if (silentAudio && silentAudio.paused) {
+                    startFallback('keepalive-audio');
+                }
+            }, 20000);
+        }
+        function stopKeepAlive() {
+            if (keepAliveTimer) { clearInterval(keepAliveTimer); keepAliveTimer = null; }
+        }
+
+        // Re-acquire on visibility transitions.
         document.addEventListener('visibilitychange', async () => {
-            if (document.visibilityState === 'visible' && engaged) {
+            if (document.visibilityState === 'visible' && (engaged || workoutActive)) {
                 await acquire();
+                startKeepAlive();
             } else if (document.visibilityState === 'hidden') {
-                // OS will likely drop the native wake lock automatically;
-                // we keep the silent-video fallback playing in case iOS PWA
-                // is still in the foreground (audio-less, invisible, harmless).
-                if (engaged && workoutActive) startFallback();
+                // iOS may suspend video when backgrounded — that's fine,
+                // the OS will already not lock the screen while we're not
+                // foreground. Stop keepalive to avoid wasted CPU.
+                stopKeepAlive();
             }
         });
 
-        // Any meaningful user tap is treated as a gesture: try to (re)engage.
-        // We attach once with capture so it fires before any inner handlers.
-        let lastGesture = 0;
+        // Touch / keyboard re-arming. iOS only unlocks autoplay within the
+        // synchronous call stack of a user gesture, so always retry play().
         function onUserGesture() {
             const now = Date.now();
             if (now - lastGesture < 400) return;
             lastGesture = now;
+            gesturePendingPlay = true;
+            // Try to play each fallback immediately from the gesture stack.
+            try {
+                if (video) {
+                    video.muted = true;
+                    const p = video.play();
+                    if (p && typeof p.catch === 'function') p.catch(() => {});
+                }
+            } catch (_) {}
+            try {
+                if (silentAudio) {
+                    const p = silentAudio.play();
+                    if (p && typeof p.catch === 'function') p.catch(() => {});
+                }
+            } catch (_) {}
             if (!engaged) {
                 engage({ workoutActive });
-            } else if (!wakeLock && !fallbackActive) {
-                acquire();
             } else if (wakeLockSupported && !wakeLock) {
                 acquire();
             }
+            // Recompute activeFallback after gesture.
+            setTimeout(() => {
+                if (video && isVideoPlaying(video)) activeFallback = 'mp4';
+                else if (canvasVid && isVideoPlaying(canvasVid)) activeFallback = 'canvas';
+                else if (silentAudio && !silentAudio.paused) activeFallback = 'audio';
+                gesturePendingPlay = false;
+            }, 250);
         }
         ['pointerdown', 'touchstart', 'click', 'keydown'].forEach((ev) => {
             window.addEventListener(ev, onUserGesture, { passive: true, capture: true });
@@ -986,6 +1179,13 @@
             setWorkoutActive,
             isSupported: () => wakeLockSupported,
             isEngaged:   () => engaged,
+            _state:      () => ({
+                activeFallback,
+                wakeLock: !!wakeLock,
+                videoPaused: !!(video && video.paused),
+                canvasPaused: !!(canvasVid && canvasVid.paused),
+                audioPaused: !!(silentAudio && silentAudio.paused),
+            }),
         };
     })();
 
