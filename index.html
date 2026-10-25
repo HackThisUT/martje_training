@@ -1,0 +1,573 @@
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+    <meta name="theme-color" content="#27ae60">
+    <meta name="color-scheme" content="light">
+    <meta name="description" content="Heimtrainings-Planer mit Übungsanleitungen, Aufwärmen, Hauptteil und Cool-Down.">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Workout">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="format-detection" content="telephone=no">
+    <meta name="application-name" content="Home Workout Plan">
+    <meta name="msapplication-TileColor" content="#27ae60">
+    <meta name="msapplication-tap-highlight" content="no">
+    <title>Home Workout Plan</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <link rel="apple-touch-icon" sizes="152x152" href="apple-touch-icon-152.png">
+    <link rel="apple-touch-icon" sizes="167x167" href="apple-touch-icon-167.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="icon-180.png">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f0f2f5;
+            color: #333;
+            text-align: center;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            max-width: 400px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        h1 { font-size: 1.5rem; color: #2c3e50; margin-bottom: 10px; }
+        h2 { font-size: 1.2rem; color: #2c3e50; margin-top: 0; }
+        p { line-height: 1.5; }
+        
+        /* Styles für die Übungsliste */
+        .exercise-list {
+            text-align: left;
+            max-height: 60vh;
+            overflow-y: auto;
+            border: 1px solid #eee;
+            border-radius: 10px;
+            margin: 15px 0;
+            padding: 0;
+        }
+        .list-item {
+            padding: 15px;
+            border-bottom: 1px solid #f0f0f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            background: #fff;
+            transition: background 0.2s;
+        }
+        .list-item:last-child { border-bottom: none; }
+        .list-item:active { background-color: #f8f9fa; }
+        .list-name { font-weight: 600; font-size: 1rem; color: #2c3e50; }
+        .list-arrow { color: #ccc; font-weight: bold; }
+        
+        /* Modal / Detail Ansicht */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            justify-content: center;
+            align-items: flex-end; /* Bottom sheet auf Mobile */
+            z-index: 1000;
+        }
+        .modal-content {
+            background: white;
+            width: 100%;
+            max-width: 400px;
+            border-radius: 20px 20px 0 0;
+            padding: 25px;
+            max-height: 85vh;
+            overflow-y: auto;
+            text-align: left;
+            position: relative;
+            animation: slideUp 0.3s ease-out;
+        }
+        @keyframes slideUp {
+            from { transform: translateY(100%); }
+            to { transform: translateY(0); }
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+        .modal-title { font-size: 1.4rem; font-weight: bold; margin: 0; color: #2c3e50; }
+        .close-btn {
+            background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #999; padding: 0;
+        }
+        .detail-section { margin-bottom: 20px; }
+        .detail-label {
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            color: #888;
+            font-weight: bold;
+            display: block;
+            margin-bottom: 5px;
+        }
+        .detail-text { font-size: 0.95rem; color: #444; margin: 0 0 10px 0; }
+        .progression-box {
+            background: #e8f5e9;
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            color: #2e7d32;
+        }
+        .regression-box {
+            background: #fff3e0;
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            color: #e65100;
+        }
+
+        /* Workout Screen Styles */
+        .phase-badge {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+        }
+        .phase-warmup { background-color: #e3f2fd; color: #1565c0; }
+        .phase-workout { background-color: #ffebee; color: #c62828; }
+        .phase-cooldown { background-color: #e8f5e9; color: #2e7d32; }
+        .phase-pause { background-color: #fff3e0; color: #e65100; }
+        
+        .exercise-name { font-size: 1.8rem; font-weight: bold; margin: 10px 0; color: #222; }
+        .exercise-desc { font-size: 1.1rem; color: #555; margin-bottom: 20px; line-height: 1.4; }
+        
+        .timer-display {
+            font-size: 4rem;
+            font-weight: bold;
+            color: #2c3e50;
+            margin: 10px 0;
+            font-variant-numeric: tabular-nums;
+        }
+        
+        .next-exercise-box {
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 20px 0;
+            text-align: left;
+        }
+        .next-label {
+            font-size: 0.85rem;
+            color: #6c757d;
+            text-transform: uppercase;
+            font-weight: bold;
+            margin-bottom: 5px;
+            display: block;
+        }
+        .next-name { font-size: 1.2rem; font-weight: bold; color: #2c3e50; }
+
+        .progress-bar {
+            width: 100%;
+            height: 10px;
+            background-color: #eee;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background-color: #3498db;
+            width: 0%;
+            transition: width 1s linear;
+        }
+
+        .controls { display: flex; gap: 10px; justify-content: center; }
+        button {
+            padding: 15px 25px;
+            font-size: 1.1rem;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            flex: 1;
+            font-weight: bold;
+        }
+        .btn-start { background-color: #27ae60; color: white; width: 100%; margin-top: 10px;}
+        .btn-next { background-color: #95a5a6; color: white; }
+        .btn-restart { background-color: #e74c3c; color: white; margin-top: 20px; width: 100%; }
+        
+        .hidden { display: none; }
+        .countdown-alert { animation: pulse 1s infinite; color: #e74c3c !important; }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+    
+        /* iOS PWA safe-area padding for notch / home indicator */
+        body {
+            padding-top: max(20px, env(safe-area-inset-top));
+            padding-bottom: max(20px, env(safe-area-inset-bottom));
+            padding-left: env(safe-area-inset-left);
+            padding-right: env(safe-area-inset-right);
+        }
+        @media (display-mode: standalone) {
+            body { background-color: #f0f2f5; }
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="container" id="app">
+    
+    <!-- SCREEN 1: ÜBERSICHT -->
+    <div id="overview-screen">
+        <h1>Deine Übungen</h1>
+        <p>Klicke auf eine Übung, um die genaue Anleitung zu sehen:</p>
+        
+        <div class="exercise-list" id="full-list-container">
+            <!-- Wird per JS gefüllt -->
+        </div>
+
+        <p style="font-size: 0.8rem; color: #888; margin-top: 10px;">Tipp: Handy laut stellen für das Signal!</p>
+        <button class="btn-start" onclick="startWorkout()">Training Starten</button>
+    </div>
+
+    <!-- SCREEN 2: WORKOUT -->
+    <div id="workout-screen" class="hidden">
+        <span id="phase-badge" class="phase-badge">Phase</span>
+        <h2 id="exercise-title" class="exercise-name">Übung</h2>
+        <p id="exercise-desc" class="exercise-desc">Beschreibung</p>
+        
+        <div class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
+        <div id="timer" class="timer-display">00:00</div>
+        
+        <div id="next-exercise-container" class="next-exercise-box">
+            <span class="next-label">Als nächstes:</span>
+            <div id="next-name" class="next-name">Lade...</div>
+        </div>
+
+        <div class="controls">
+            <button id="action-btn" class="btn-next" onclick="nextStep()">Überspringen</button>
+        </div>
+        <button class="btn-restart" onclick="location.reload()">Neu Starten</button>
+    </div>
+</div>
+
+<!-- MODAL FÜR DETAILS -->
+<div id="detail-modal" class="modal-overlay" onclick="closeModal(event)">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="modal-title" class="modal-title">Übung</h3>
+            <button class="close-btn" onclick="document.getElementById('detail-modal').style.display='none'">&times;</button>
+        </div>
+        <div class="detail-section">
+            <span class="detail-label">Ausführung:</span>
+            <p id="modal-desc" class="detail-text">Beschreibung</p>
+        </div>
+        <div class="detail-section">
+            <span class="detail-label">Einfachere Variante (Regression):</span>
+            <div id="modal-regression" class="regression-box">Info</div>
+        </div>
+        <div class="detail-section">
+            <span class="detail-label">Schwerere Variante (Progression):</span>
+            <div id="modal-progression" class="progression-box">Info</div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let audioCtx = null;
+
+    function playBeep() {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); 
+        gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime); 
+        gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        oscillator.start();
+        oscillator.stop(audioCtx.currentTime + 0.5);
+    }
+
+    // Detaillierte Datenstruktur für die 6 Hauptübungen
+    const uniqueExercises = [
+        {
+            name: "Kniebeugen",
+            desc: "Füße hüftbreit, Zehen leicht nach außen. Hintern nach hinten schieben (wie auf einen Stuhl setzen). Oberkörper bleibt aufrecht. Knie dürfen nicht nach innen knicken.",
+            regression: "Setzen Sie sich wirklich kurz auf einen Stuhl und stehen Sie sofort wieder auf. Halten Sie sich an einer Türzarge fest.",
+            progression: "Führen Sie die Bewegung langsamer aus (3 Sek runter, 1 Sek hoch). Oder halten Sie eine Wasserflasche vor die Brust."
+        },
+        {
+            name: "Liegestütze (Wand/Tisch)",
+            desc: "Hände etwas weiter als schulterbreit gegen eine Wand oder auf eine stabile Tischkante. Körper bildet eine gerade Linie. Ellenbogen beugen und Oberkörper zur Unterlage neigen, dann wegdrücken.",
+            regression: "Gehen Sie höher an die Wand (je steiler, desto leichter).",
+            progression: "Gehen Sie tiefer (z.B. auf eine Sofa-Kante oder Bank). Achten Sie darauf, dass die Hüfte nicht durchhängt."
+        },
+        {
+            name: "Vogel-Hund",
+            desc: "Vierfüßlerstand (Hände unter Schultern, Knie unter Hüfte). Rechten Arm nach vorne und linkes Bein nach hinten strecken, bis sie auf einer Linie mit dem Rücken sind. Kurz halten, dann wechseln.",
+            regression: "Strecken Sie nur den Arm oder nur das Bein. Oder führen Sie die Übung im Knien aus, ohne zu strecken (nur Balance halten).",
+            progression: "Versuchen Sie, Ellenbogen und Knie unter dem Bauch kurz zu berühren, bevor Sie wieder strecken."
+        },
+        {
+            name: "Ausfallschritt hinten",
+            desc: "Im Stand einen Fuß nach hinten setzen und beide Knie leicht beugen, als würde man auf ein Knie sinken. Das vordere Knie darf nicht über die Zehenspitzen rutschen. Dann wieder aufrichten.",
+            regression: "Halten Sie sich mit einer Hand fest an einer Stuhllehne oder Wand nur für das Gleichgewicht. Machen Sie nur kleine Schritte nach hinten.",
+            progression: "Halten Sie zwei Wasserflaschen in den Händen. Führen Sie die Bewegung sehr langsam aus."
+        },
+        {
+            name: "Beckenheben (Brücke)",
+            desc: "Rückenlage, Beine angewinkelt, Füße hüftbreit aufstellen. Arme liegen neben dem Körper. Das Becken anheben, bis Oberschenkel und Oberkörper eine Linie bilden. Po dabei fest anspannen.",
+            regression: "Heben Sie das Becken nur ein wenig an. Stellen Sie die Füße näher an das Gesäß.",
+            progression: "Heben Sie ein Bein während der Oben-Position kurz an (einbeinige Brücke). Oder legen Sie ein Buch auf das Becken."
+        },
+        {
+            name: "Unterarmstütz (Plank)",
+            desc: "Auf die Unterarme stützen, Ellenbogen unter den Schultern. Beine strecken (oder Knie am Boden lassen). Körper bildet eine gerade Linie von Kopf bis Fuß. Bauchnabel einziehen.",
+            regression: "Bleiben Sie auf den Knien. Wichtig ist nur, dass der Rücken gerade ist und nicht ins Hohlkreuz fällt.",
+            progression: "Heben Sie abwechselnd ein Bein oder einen Arm kurz an. Oder wippen Sie leicht vor und zurück."
+        }
+    ];
+
+    // Vollständiger Ablaufplan für das Training
+    const workoutPlan = [
+        { phase: "Aufwärmen", name: "Auf der Stelle marschieren", desc: "Arme locker mitschwingen, warm werden.", duration: 60 },
+        { phase: "Aufwärmen", name: "Arm Kreisen", desc: "Große Kreise ziehen. 30 Sek vor, 30 Sek zurück.", duration: 60 },
+        { phase: "Aufwärmen", name: "Hüftkreisen", desc: "Hände in die Hüften, sanfte Kreise ziehen.", duration: 60 },
+        { phase: "Aufwärmen", name: "Kniehebemarsch", desc: "Knie langsam Richtung Brust ziehen.", duration: 60 },
+        
+        { phase: "Hauptteil (1/2)", name: "Kniebeugen", desc: "Siehe Anleitung.", duration: 45 },
+        { phase: "Pause", name: "Kurze Pause", desc: "Durchatmen, trinken.", duration: 30 },
+        { phase: "Hauptteil (1/2)", name: "Liegestütze (Wand/Tisch)", desc: "Siehe Anleitung.", duration: 45 },
+        { phase: "Pause", name: "Kurze Pause", desc: "Durchatmen.", duration: 30 },
+        { phase: "Hauptteil (1/2)", name: "Vogel-Hund", desc: "Siehe Anleitung.", duration: 45 },
+        { phase: "Pause", name: "Kurze Pause", desc: "Durchatmen.", duration: 30 },
+        { phase: "Hauptteil (1/2)", name: "Ausfallschritt hinten", desc: "Siehe Anleitung.", duration: 45 },
+        { phase: "Pause", name: "Kurze Pause", desc: "Durchatmen.", duration: 30 },
+        { phase: "Hauptteil (1/2)", name: "Beckenheben (Brücke)", desc: "Siehe Anleitung.", duration: 45 },
+        { phase: "Pause", name: "Kurze Pause", desc: "Durchatmen.", duration: 30 },
+        { phase: "Hauptteil (1/2)", name: "Unterarmstütz (Plank)", desc: "Siehe Anleitung.", duration: 30 },
+        { phase: "Pause", name: "Längere Pause", desc: "Trinken, durchschnaufen. Gleich Runde 2!", duration: 120 },
+
+        { phase: "Hauptteil (2/2)", name: "Kniebeugen", desc: "Wiederholung.", duration: 45 },
+        { phase: "Pause", name: "Kurze Pause", desc: "Durchatmen.", duration: 30 },
+        { phase: "Hauptteil (2/2)", name: "Liegestütze (Wand/Tisch)", desc: "Wiederholung.", duration: 45 },
+        { phase: "Pause", name: "Kurze Pause", desc: "Durchatmen.", duration: 30 },
+        { phase: "Hauptteil (2/2)", name: "Vogel-Hund", desc: "Wiederholung.", duration: 45 },
+        { phase: "Pause", name: "Kurze Pause", desc: "Durchatmen.", duration: 30 },
+        { phase: "Hauptteil (2/2)", name: "Ausfallschritt hinten", desc: "Wiederholung.", duration: 45 },
+        { phase: "Pause", name: "Kurze Pause", desc: "Durchatmen.", duration: 30 },
+        { phase: "Hauptteil (2/2)", name: "Beckenheben (Brücke)", desc: "Wiederholung.", duration: 45 },
+        { phase: "Pause", name: "Kurze Pause", desc: "Durchatmen.", duration: 30 },
+        { phase: "Hauptteil (2/2)", name: "Unterarmstütz (Plank)", desc: "Wiederholung.", duration: 30 },
+        { phase: "Pause", name: "Längere Pause", desc: "Super gemacht! Gleich geht's zum Dehnen.", duration: 60 },
+
+        { phase: "Cool-Down", name: "Brust öffnen", desc: "Hände hinter dem Rücken verschränken, tief atmen.", duration: 30 },
+        { phase: "Cool-Down", name: "Oberschenkel dehnen", desc: "Stand, Fuß zum Po ziehen. Links und Rechts.", duration: 60 },
+        { phase: "Cool-Down", name: "Katzenbuckel", desc: "Vierfüßlerstand: Rücken rund, dann leicht ins Hohlkreuz.", duration: 60 },
+        { phase: "Fertig", name: "Training beendet!", desc: "Super Leistung! Trink etwas Wasser.", duration: 10 }
+    ];
+
+    let currentIndex = 0;
+    let timeLeft = 0;
+    let timerInterval = null;
+    let isRunning = false;
+
+    const overviewScreen = document.getElementById('overview-screen');
+    const workoutScreen = document.getElementById('workout-screen');
+    const fullListContainer = document.getElementById('full-list-container');
+    const modal = document.getElementById('detail-modal');
+    
+    const phaseBadge = document.getElementById('phase-badge');
+    const exerciseTitle = document.getElementById('exercise-title');
+    const exerciseDesc = document.getElementById('exercise-desc');
+    const timerDisplay = document.getElementById('timer');
+    const progressFill = document.getElementById('progress-fill');
+    const actionBtn = document.getElementById('action-btn');
+    const nextContainer = document.getElementById('next-exercise-container');
+    const nextName = document.getElementById('next-name');
+
+    function formatTime(seconds) {
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
+    }
+
+    // Liste generieren (nur die 6 Übungen)
+    function renderOverviewList() {
+        fullListContainer.innerHTML = '';
+        uniqueExercises.forEach((item, index) => {
+            const div = document.createElement('div');
+            div.className = 'list-item';
+            div.onclick = () => openModal(index);
+            div.innerHTML = `
+                <span class="list-name">${index + 1}. ${item.name}</span>
+                <span class="list-arrow">›</span>
+            `;
+            fullListContainer.appendChild(div);
+        });
+    }
+
+    // Modal Funktionen
+    function openModal(index) {
+        const data = uniqueExercises[index];
+        document.getElementById('modal-title').textContent = data.name;
+        document.getElementById('modal-desc').textContent = data.desc;
+        document.getElementById('modal-regression').textContent = data.regression;
+        document.getElementById('modal-progression').textContent = data.progression;
+        modal.style.display = 'flex';
+    }
+
+    function closeModal(e) {
+        if (e.target === modal) {
+            modal.style.display = 'none';
+        }
+    }
+
+    function updateNextExercisePreview() {
+        const nextIndex = currentIndex + 1;
+        if (nextIndex < workoutPlan.length) {
+            const next = workoutPlan[nextIndex];
+            nextName.textContent = next.name;
+            nextContainer.style.display = 'block';
+        } else {
+            nextContainer.style.display = 'none';
+        }
+    }
+
+    function updateDisplay() {
+        const current = workoutPlan[currentIndex];
+        phaseBadge.textContent = current.phase;
+        exerciseTitle.textContent = current.name;
+        exerciseDesc.textContent = current.desc;
+        timerDisplay.textContent = formatTime(timeLeft);
+        
+        document.body.classList.remove('rest-mode');
+        phaseBadge.className = 'phase-badge'; 
+        timerDisplay.classList.remove('countdown-alert');
+        
+        if(current.phase.includes('Pause') || current.phase === 'Fertig') {
+            phaseBadge.classList.add('phase-pause');
+        } else if (current.phase === 'Aufwärmen') {
+            phaseBadge.classList.add('phase-warmup');
+        } else if (current.phase === 'Cool-Down') {
+            phaseBadge.classList.add('phase-cooldown');
+        } else {
+            phaseBadge.classList.add('phase-workout');
+        }
+
+        if (current.phase === 'Fertig') {
+            actionBtn.textContent = "Schließen";
+            actionBtn.onclick = () => alert("Danke fürs Trainieren!");
+            nextContainer.style.display = 'none';
+        } else {
+            actionBtn.textContent = "Nächste Übung";
+            actionBtn.onclick = nextStep;
+            updateNextExercisePreview();
+        }
+        
+        const total = current.duration;
+        const percentage = ((total - timeLeft) / total) * 100;
+        progressFill.style.width = percentage + '%';
+    }
+
+    function startTimer() {
+        if (timerInterval) clearInterval(timerInterval);
+        isRunning = true;
+        const total = workoutPlan[currentIndex].duration;
+        
+        timerInterval = setInterval(() => {
+            if (!isRunning) return;
+            timeLeft--;
+            timerDisplay.textContent = formatTime(timeLeft);
+            
+            const percentage = ((total - timeLeft) / total) * 100;
+            progressFill.style.width = percentage + '%';
+
+            if (timeLeft <= 3 && timeLeft > 0) {
+                timerDisplay.classList.add('countdown-alert');
+                playBeep();
+            } else {
+                timerDisplay.classList.remove('countdown-alert');
+            }
+
+            if (timeLeft <= 0) {
+                nextStep();
+            }
+        }, 1000);
+    }
+
+    function nextStep() {
+        if (timerInterval) clearInterval(timerInterval);
+        currentIndex++;
+        if (currentIndex >= workoutPlan.length) {
+            currentIndex = workoutPlan.length - 1;
+            updateDisplay();
+            timeLeft = 0;
+            timerDisplay.textContent = "00:00";
+            progressFill.style.width = '100%';
+            isRunning = false;
+            return;
+        }
+        const current = workoutPlan[currentIndex];
+        timeLeft = current.duration;
+        updateDisplay();
+        startTimer();
+    }
+
+    function startWorkout() {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+
+        overviewScreen.classList.add('hidden');
+        workoutScreen.classList.remove('hidden');
+        
+        const first = workoutPlan[0];
+        timeLeft = first.duration;
+        updateDisplay();
+        startTimer();
+    }
+
+    // Init
+    renderOverviewList();
+    updateDisplay();
+</script>
+
+
+<script>
+    // Register service worker for offline use
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker
+                .register('service-worker.js')
+                .then((reg) => console.log('SW registered:', reg.scope))
+                .catch((err) => console.warn('SW registration failed:', err));
+        });
+    }
+
+    // Track when app is launched in standalone (home-screen) mode
+    window.addEventListener('appinstalled', () => {
+        console.log('PWA installed to home screen');
+    });
+</script>
+
+</body>
+</html>
